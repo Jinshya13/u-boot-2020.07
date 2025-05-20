@@ -87,7 +87,7 @@ int board_late_init(void)
 }
 #endif
 
-#if defined(CONFIG_XPL_BUILD)
+// #if defined(CONFIG_XPL_BUILD)
 void spl_board_init(void)
 {
 	enable_caches();
@@ -105,7 +105,7 @@ void spl_perform_fixups(struct spl_image_info *spl_image)
 		fixup_memory_node(spl_image);
 	}
 }
-#endif
+// #endif
 
 #if defined(CONFIG_OF_BOARD_SETUP)
 int ft_board_setup(void *blob, struct bd_info *bd)
