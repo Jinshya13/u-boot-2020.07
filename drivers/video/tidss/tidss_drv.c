@@ -735,30 +735,6 @@ static void dss_vp_init(struct tidss_drv_priv *priv)
 		VP_REG_FLD_MOD(priv, i, DSS_VP_CONFIG, 1, 2, 2);
 }
 
-// static int dss_init_am65x_oldi_io_ctrl(struct udevice *dev,
-// 				       struct tidss_drv_priv *priv)
-// {
-// 	struct udevice *syscon;
-// 	struct regmap *regmap;
-// 	int ret = 0;
-
-// 	ret = uclass_get_device_by_phandle(UCLASS_SYSCON, dev, "ti,am65x-oldi-io-ctrl",
-// 					   &syscon);
-// 	if (ret) {
-// 		debug("unable to find ti,am65x-oldi-io-ctrl syscon device (%d)\n", ret);
-// 		return ret;
-// 	}
-
-// 	/* get grf-reg base address */
-// 	regmap = syscon_get_regmap(syscon);
-// 	if (!regmap) {
-// 		debug("unable to find rockchip grf regmap\n");
-// 		return -ENODEV;
-// 	}
-// 	priv->oldi_io_ctrl = regmap;
-// 	return 0;
-// }
-
 static int tidss_drv_probe(struct udevice *dev)
 {
 	struct video_uc_plat *uc_plat = dev_get_uclass_plat(dev);
@@ -770,9 +746,6 @@ static int tidss_drv_probe(struct udevice *dev)
 	int ret = 0;
 	const char *mode;
 
-	tidss_oldi_init(dev, &priv->oldis, &priv->num_oldis);
-	// printf("\n Total oldi panels connected: %d ", priv->num_oldis);
-	// printf("\n oldi instance: %d, parent vp : %d\n",priv->oldis[0]->oldi_instance, priv->oldis[0]->parent_vp);
 	priv->dev = dev;
 
 	priv->feat = &dss_am625_feats;
@@ -784,6 +757,12 @@ static int tidss_drv_probe(struct udevice *dev)
 	priv->pixel_format = DSS_FORMAT_XRGB8888;
 
 	dss_common_regmap = priv->feat->common_regs;
+
+	ret = tidss_oldi_init(dev, &priv->oldis, &priv->num_oldis);
+	if (ret) {
+		if (ret != -ENODEV)
+			dev_err(dev, "oldi panel error %d\n", ret);
+	}
 
 	ret = uclass_first_device_err(UCLASS_PANEL, &panel);
 	if (ret) {
@@ -847,17 +826,6 @@ static int tidss_drv_probe(struct udevice *dev)
 		priv->base_vp[i] = dev_remap_addr_name(dev, priv->feat->vp_name[i]);
 	}
 
-	// ret = clk_get_by_name(dev, "vp1", &priv->vp_clk[0]);
-	// if (ret) {
-	// 	printf("\nClock not found\n");
-	// 	dev_err(dev, "video port %d clock enable error %d\n", i, ret);
-	// 	return ret;
-	// }
-	if(priv->oldis[0]->serial->dev->name)
-		printf("\n oldi_instance: %d, clock: %s\n",priv->oldis[0]->oldi_instance,priv->oldis[0]->serial->dev->name);
-	else{
-		printf("\nClock not found\n");
-	}
 	dss_ovr_set_plane(priv, 1, priv->oldis[0]->parent_vp, 0, 0, 0);
 	dss_ovr_enable_layer(priv, 0, 0, true);
 
@@ -885,17 +853,16 @@ static int tidss_drv_probe(struct udevice *dev)
 
 	ret = clk_get_by_name(dev, "fck", &priv->fclk);
 	if (ret) {
-		printf("\nfck: clock not found\n");
 		dev_err(dev, "peripheral clock get error %d\n", ret);
 		return ret;
 	}
-	printf("found all clks and enable fck\n");
+
 	ret = clk_enable(&priv->fclk);
 	if (ret) {
 		dev_err(dev, "peripheral clock enable error %d\n", ret);
 		return ret;
 	}
-	printf("enable fck done\n");
+
 	if (IS_ERR(&priv->fclk)) {
 		dev_err(dev, "%s: Failed to get fclk: %ld\n",
 			__func__, PTR_ERR(&priv->fclk));
@@ -905,7 +872,6 @@ static int tidss_drv_probe(struct udevice *dev)
 	dev_dbg(dev, "DSS fclk %lu Hz\n", clk_get_rate(&priv->fclk));
 
 	video_set_flush_dcache(dev, true);
-	printf("Tidss probe\n");
 	return 0;
 }
 

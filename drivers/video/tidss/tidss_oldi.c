@@ -46,7 +46,6 @@ static int tidss_oldi_get_port_pixels_type(ofnode port_node)
 		ofnode_has_property(port_node, "dual-lvds-even-pixels");
 	bool odd_pixels =
 		ofnode_has_property(port_node, "dual-lvds-odd-pixels");
-	// printf("\nPixel types: %s\n", even_pixels?"even_pixels":(odd_pixels ? "odd" : "none"));
 	return (even_pixels ? OLDI_PIXELS_EVEN : 0) |
 	       (odd_pixels ? OLDI_PIXELS_ODD : 0);
 }
@@ -59,19 +58,16 @@ static int tidss_oldi_get_remote_pixels_type(ofnode port_node)
 	ofnode_for_each_subnode(endpoint, port_node) {
 		ofnode remote_port;
 		int current_pt;
-		// printf("get_remote_pixels_type: port_name = %s\n, port_parent = %s", ofnode_get_name(port_node), ofnode_get_name(ofnode_get_parent(ofnode_get_parent(port_node))));		
-		// printf("endpoint = %s\n", ofnode_get_name(endpoint));
+
 		if (!ofnode_name_eq(endpoint, "endpoint"))
 			continue;
 
 		remote_port = ofnode_graph_get_remote_port(endpoint);
-		// printf("remote_port = %s, parent node: %s\n", ofnode_get_name(remote_port), ofnode_get_name(ofnode_get_parent(ofnode_get_parent(remote_port))));
 		if (!ofnode_valid(remote_port)) {
 			return -EPIPE;
 		}
 
 		current_pt = tidss_oldi_get_port_pixels_type(remote_port);
-		// printf("\ncurrent_pt = %d\n",current_pt);
 		if (pixels_type < 0)
 			pixels_type = current_pt;
 
@@ -90,14 +86,11 @@ int tidss_oldi_get_dual_link_pixel_order(ofnode port1,
 	if (!ofnode_valid(port1) || !ofnode_valid(port2))
 	return -EINVAL;
 	
-	// printf("\ntidss_oldi_get_dual_link_pixel_order: port1: %s, port2: %s\n", ofnode_get_name(port1), ofnode_get_name(port2));
 	remote_p1_pt = tidss_oldi_get_remote_pixels_type(port1);
-	// printf("remote_p1_pt = %d\n", remote_p1_pt);
 	if (remote_p1_pt < 0)
 		return remote_p1_pt;
 
 	remote_p2_pt = tidss_oldi_get_remote_pixels_type(port2);
-	// printf("remote_p2_pt = %d\n", remote_p2_pt);
 	if (remote_p2_pt < 0)
 		return remote_p2_pt;
 
@@ -120,13 +113,11 @@ static int get_oldi_mode(ofnode oldi_tx, u32 *companion_instance)
 	ofnode port0, port1;
 	int pixel_order;
     int ret;
-    // printf("\nget_oldi_modes_api, companion instance = %d\n", *companion_instance);
 	/*
 	 * Find if the OLDI is paired with another OLDI for combined OLDI
 	 * operation (dual-lvds or clone).
 	 */
 	companion = ofnode_parse_phandle(oldi_tx, "ti,companion-oldi", 0);
-	// printf("\nnode name: %s\n",ofnode_get_name(companion));
 	if (!ofnode_valid(companion)) {
 		/*
 		 * OLDI TXes in Single Link mode do not have companion
@@ -147,7 +138,6 @@ static int get_oldi_mode(ofnode oldi_tx, u32 *companion_instance)
 	ret = *companion_instance;
     *companion_instance = ofnode_read_u32_default(companion, "reg", *companion_instance);
     if (*companion_instance == ret){
-		// printf("\ncompanion instance = %d\n", *companion_instance);
 		return OLDI_MODE_UNSUPPORTED;
 	}
     
@@ -158,11 +148,8 @@ static int get_oldi_mode(ofnode oldi_tx, u32 *companion_instance)
     * odd pixels than we need to enable vertical stripe output.
     */
     port0 = ofnode_graph_get_port_by_id(oldi_tx, 1);
-	// printf("\nport name: %s, port parent name: %s\n",ofnode_get_name(port0), ofnode_get_name(ofnode_get_parent(ofnode_get_parent(port0))));
     port1 = ofnode_graph_get_port_by_id(companion, 1);
-	// printf("\nport name: %s, port parent name: %s\n",ofnode_get_name(port1), ofnode_get_name(ofnode_get_parent(ofnode_get_parent(port1))));
 	pixel_order = tidss_oldi_get_dual_link_pixel_order(port0, port1);
-	// printf("\npixel_order = %d\n", pixel_order);
 	switch (pixel_order) {
 	case -EINVAL:
 		/*
@@ -189,7 +176,6 @@ static int get_parent_dss_vp(ofnode oldi_tx, u32 *parent_vp)
     int ret = *parent_vp;
 
     ep = ofnode_graph_get_endpoint_by_regs(oldi_tx, 0, -1);
-	// printf("\noldi_instance: %s, ep: %s\n", ofnode_get_name(oldi_tx),ofnode_get_name(ep));
     if (ofnode_valid(ep)) {
         dss_port = ofnode_graph_get_remote_port(ep);
         if (!ofnode_valid(dss_port)) {
@@ -215,7 +201,6 @@ static int tidss_init_oldi_io_ctrl(struct udevice *dev, struct tidss_oldi *tidss
 	ret = uclass_get_device_by_phandle(UCLASS_SYSCON, dev, "ti,am65x-oldi-io-ctrl",
 					   &syscon);
 	if (ret) {
-		printf("\ntidss_init_oldi_io_ctrl: unable to find ti,am65x-oldi-io-ctrl syscon device (%d)\n", ret);
 		debug("unable to find ti,am65x-oldi-io-ctrl syscon device (%d)\n", ret);
 		return ret;
 	}
@@ -232,7 +217,7 @@ static int tidss_init_oldi_io_ctrl(struct udevice *dev, struct tidss_oldi *tidss
 
 
 int tidss_oldi_init(struct udevice *dev, struct tidss_oldi **tidss_oldis, int *num_oldis){
-	u32 parent_vp = 6, oldi_instance = 6, companion_instance;
+	u32 parent_vp, oldi_instance , companion_instance;
     ofnode child;
     ofnode ep;
     int ret, tidss_oldi_panel_count = 0;
@@ -247,10 +232,8 @@ int tidss_oldi_init(struct udevice *dev, struct tidss_oldi **tidss_oldis, int *n
 	
     ofnode_for_each_subnode(child, oldi_parent){ 
 		tidss_oldis[tidss_oldi_panel_count] = NULL;
-		parent_vp = 6;
-		// printf("\nchild = %s\n", ofnode_get_name(child));
+		parent_vp = -ENODEV, oldi_instance = -ENODEV, companion_instance = -ENODEV;
 		ret = get_parent_dss_vp(child, &parent_vp);
-		// printf("\nchild = %s, parent_dss_vp = %d\n", ofnode_get_name(child), parent_vp);
 		if (ret == -ENODEV) {
 			/*
             * ENODEV means that this particular OLDI node
@@ -269,47 +252,44 @@ int tidss_oldi_init(struct udevice *dev, struct tidss_oldi **tidss_oldis, int *n
 			ret = -ENODEV;
             break;
         }
-		companion_instance = -2;
-		// printf("oldi_instance = %d, companion_instance = %d, link_type = %d\n", oldi_instance, companion_instance, link_type);
+
         link_type = get_oldi_mode(child, &companion_instance);
 		if (link_type == OLDI_MODE_UNSUPPORTED) {
-			// printf("OLDI%u: Unsupported OLDI connection.\n",
-			// 	oldi_instance);
-			} else if (link_type == OLDI_MODE_SECONDARY) {
-				/*
-				* This is the secondary OLDI node, which serves as a
-				* companinon to the primary OLDI, when it is configured
-				* for the dual-lvds mode. Since the primary OLDI will
-				* be a part of bridge chain, no need to put this one
-				* too. Continue onto the next OLDI node.
-				*/
-			// printf("oldi instance: %d, is a secondary/companion in dual_lvds mode\n",oldi_instance);
+			dev_err(dev, "OLDI%u: Unsupported OLDI connection.\n", oldi_instance);
+			ret = OLDI_MODE_UNSUPPORTED;
+			/* Return gracefully, no supported OLDI panel found */
+			break;
+		} else if (link_type == OLDI_MODE_SECONDARY) {
+			/*
+			* This is the secondary OLDI node, which serves as a
+			* companinon to the primary OLDI, when it is configured
+			* for the dual-lvds mode. Since the primary OLDI will
+			* be a part of bridge chain, no need to put this one
+			* too. Continue onto the next OLDI node.
+			*/
 			continue;
 		}
-		// printf("\n oldi instance: %d, parent vp : %d\n",oldi_instance, parent_vp);
 		tidss_oldi = malloc(sizeof(struct tidss_oldi));
 		tidss_oldi->dev = dev;
 		tidss_oldi->parent_vp = parent_vp;
 		tidss_oldi->oldi_instance = oldi_instance;
 		tidss_oldi->companion_instance = companion_instance;
 		tidss_oldi->link_type = link_type;
-		printf("\noldi_instance_name/child: %s\n", ofnode_get_name(child));
-		ret = tidss_init_oldi_io_ctrl(dev, tidss_oldi);
-		if(ret) {
-			debug("Could not initialize oldi_io_ctrl\n");
-			return ret;
-		}
+
 		ret = clk_get_by_name_nodev(child, "serial", &serial);
-		printf("\nhas property : clock-names: %d", ofnode_has_property(child, "clock-names"));
 		if (ret) {
 			dev_err(dev, "video port %d clock enable error %d\n", parent_vp, ret);
 			return ret;
 		}
+
+		ret = tidss_init_oldi_io_ctrl(dev, tidss_oldi);
+		if(ret) {
+			debug("tidss could not initialize oldi_io_ctrl\n");
+			return ret;
+		}
 		tidss_oldi->serial = malloc(sizeof(struct clk));
 		*(tidss_oldi->serial) = serial;
-
 		tidss_oldis[tidss_oldi_panel_count] = tidss_oldi;
-		// tidss_oldi->next_bridge = bridge;
 		tidss_oldi_panel_count++;
     }
 	*num_oldis = tidss_oldi_panel_count;

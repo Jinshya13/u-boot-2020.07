@@ -57,6 +57,13 @@
 			reg = <0x4130 0x4>;
 			#clock-cells = <1>;
 		};
+
+		dss_oldi_io_ctrl: oldi-io-controller@8600 {
+			status = "okay";
+			bootph-all;
+			compatible = "ti,am625-dss-oldi-io-ctrl", "syscon";
+			reg = <0x8600 0x200>;
+		};
 	};
 
 	dmss: bus@48000000 {
@@ -194,6 +201,8 @@
 	};
 
 	dmsc: system-controller@44043000 {
+		bootph-all;
+		status = "okay";
 		compatible = "ti,k2g-sci";
 		ti,host-id = <12>;
 		mbox-names = "rx", "tx";
@@ -201,7 +210,6 @@
 			 <&secure_proxy_main 13>;
 		reg-names = "debug_messages";
 		reg = <0x00 0x44043000 0x00 0xfe0>;
-		bootph-all;
 
 		k3_pds: power-controller {
 			compatible = "ti,sci-pm-domain";
@@ -210,9 +218,10 @@
 		};
 
 		k3_clks: clock-controller {
+			bootph-all;
+			status = "okay";
 			compatible = "ti,k2g-sci-clk";
 			#clock-cells = <2>;
-			bootph-all;
 		};
 
 		k3_reset: reset-controller {
