@@ -32,6 +32,7 @@
 #include <dm/of_access.h>
 #include <dm/device_compat.h>
 #include <dm/device-internal.h>
+#include <dm/ofnode_graph.h>
 
 #include <linux/bug.h>
 #include <linux/err.h>
@@ -40,7 +41,7 @@
 
 #include "tidss_drv.h"
 #include "tidss_regs.h"
-// #include "tidss_oldi.h"
+#include "tidss_oldi.h"
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -563,7 +564,7 @@ int dss_vp_enable_clk(struct tidss_drv_priv *priv, u32 hw_videoport)
 void dss_vp_prepare(struct tidss_drv_priv *priv, u32 hw_videoport)
 {
 	dss_vp_set_gamma(priv, hw_videoport, NULL, 0);
-	dss_vp_set_default_color(priv, 0, 0);
+	dss_vp_set_default_color(priv, hw_videoport, 0);
 
 	if (priv->feat->vp_bus_type[hw_videoport] == DSS_VP_OLDI) {
 		dss_oldi_tx_power(priv, true);
@@ -735,6 +736,81 @@ static void dss_vp_init(struct tidss_drv_priv *priv)
 		VP_REG_FLD_MOD(priv, i, DSS_VP_CONFIG, 1, 2, 2);
 }
 
+static bool is_panel_enabled(ofnode endpoint){
+	ofnode port_parent = ofnode_graph_get_remote_port_parent(endpoint);
+	/* ports parent is the top-most parent of the node, for example dss 
+	   main node in case of the dss ip and oldi-transmitter node in case of
+	   vps attached to oldi.
+	 */
+	ofnode ports_parent = ofnode_get_parent(port_parent);
+
+	/* Checking for both parent port and ports parent node, as for dpi,
+	   in our case it's parent node is the i2c node and if its disabled
+	   then this api should return false, as the hdmi-bridge doesn't
+	   start and timings can't be set, and hence the panel will not get
+	   any meaningful data.
+	 */
+	return ofnode_is_enabled(port_parent) && ofnode_is_enabled(ports_parent);
+}
+
+static int tidss_attach_active_panels(struct tidss_drv_priv *priv){
+	ofnode dss_node = dev_ofnode(priv->dev);
+	ofnode dss_ports = ofnode_find_subnode(dss_node, "ports");
+	ofnode port, remote_port, local_endpoint;
+	int hw_videoport;
+	int active_panels = 0;
+	int ret;
+
+	ofnode_for_each_subnode(port, dss_ports) {
+		if (strncmp(ofnode_get_name(port), "port", 4))
+			continue;
+
+		ofnode_for_each_subnode(local_endpoint, port) {
+			if (strncmp(ofnode_get_name(local_endpoint), "endpoint", 8))
+				continue;
+			
+			if (!is_panel_enabled(local_endpoint)){
+				continue;
+			}
+
+			/* Get videoport id*/
+			if(ofnode_read_u32(port, "reg", &hw_videoport)){
+				dev_warn(priv->dev, "Failed to read videoport id, reg property not found for node: %s\n", ofnode_get_name(local_endpoint));
+				/* Check for other video ports */
+				continue;
+			}
+
+			remote_port = ofnode_graph_get_remote_port_parent(local_endpoint);
+			if(strstr(ofnode_get_name(remote_port), "oldi")){
+				/* Initialize oldi */
+				ret = tidss_oldi_init(priv->dev);
+				if (ret) {
+					if (ret != -ENODEV)
+					dev_warn(priv->dev, "oldi panel error %d\n", ret);
+					break;
+				}
+				
+				active_panels++;
+				priv->active_hw_videoport_id = hw_videoport;
+				/* Only one dual-link oldi panel supported at a time so 
+				initialize it only and then check for other videoports
+				*/
+				break;
+			}
+			else if(strstr(ofnode_get_name(remote_port), "hdmi")){
+				/* Initialize hdmi */
+				priv->active_hw_videoport_id = hw_videoport;
+				active_panels++;
+			}
+		}
+	}
+	priv->active_panels = active_panels;
+	if (active_panels == 0){
+		return -1;		
+	}
+	return 0;
+}
+
 static int tidss_drv_probe(struct udevice *dev)
 {
 	struct video_uc_plat *uc_plat = dev_get_uclass_plat(dev);
@@ -758,10 +834,12 @@ static int tidss_drv_probe(struct udevice *dev)
 
 	dss_common_regmap = priv->feat->common_regs;
 
-	ret = tidss_oldi_init(dev, &priv->oldis, &priv->num_oldis);
-	if (ret) {
-		if (ret != -ENODEV)
-			dev_err(dev, "oldi panel error %d\n", ret);
+	ret = tidss_attach_active_panels(priv);
+	if (ret){
+		if (ret == -1){
+			dev_warn(priv->dev, "NO active panels detected, check status of panel nodes\n");
+		}
+		return ret;
 	}
 
 	ret = uclass_first_device_err(UCLASS_PANEL, &panel);
@@ -811,7 +889,7 @@ static int tidss_drv_probe(struct udevice *dev)
 	dss_vid_write(priv, 0, DSS_VID_BA_1, uc_plat->base & 0xffffffff);
 	dss_vid_write(priv, 0, DSS_VID_BA_EXT_1, (u64)uc_plat->base >> 32);
 
-	ret = dss_plane_setup(priv, 0, priv->oldis[0]->parent_vp);
+	ret = dss_plane_setup(priv, 0, priv->active_hw_videoport_id);
 	if (ret) {
 		dss_plane_enable(priv, 0, false);
 			return ret;
@@ -826,29 +904,25 @@ static int tidss_drv_probe(struct udevice *dev)
 		priv->base_vp[i] = dev_remap_addr_name(dev, priv->feat->vp_name[i]);
 	}
 
-	dss_ovr_set_plane(priv, 1, priv->oldis[0]->parent_vp, 0, 0, 0);
+	ret = clk_get_by_name(dev, dss_am625_feats.vpclk_name[priv->active_hw_videoport_id], &priv->vp_clk[priv->active_hw_videoport_id]);
+	if (ret) {
+		dev_err(dev, "video port %d clock enable error %d\n", i, ret);
+		return ret;
+	}
+
+	dss_ovr_set_plane(priv, 1, 0, 0, 0, 0);
 	dss_ovr_enable_layer(priv, 0, 0, true);
 
 	/* Video Port cloks */
-	dss_vp_enable_clk(priv, priv->oldis[0]->parent_vp);
+	dss_vp_enable_clk(priv, priv->active_hw_videoport_id);
 
-	dss_vp_set_clk_rate(priv, priv->oldis[0]->parent_vp, timings.pixelclock.typ * 1000);
+	dss_vp_set_clk_rate(priv, priv->active_hw_videoport_id, timings.pixelclock.typ * 1000);
 
-	priv->oldi_mode = OLDI_MODE_OFF;
 	uc_priv->xsize = timings.hactive.typ;
 	uc_priv->ysize = timings.vactive.typ;
-	if (priv->feat->subrev == DSS_AM65X || priv->feat->subrev == DSS_AM625) {
-		priv->oldi_mode = OLDI_DUAL_LINK;
-		if (priv->oldi_mode) {
-			// ret = dss_init_am65x_oldi_io_ctrl(dev, priv);
-				ret = 0;
-			if (ret)
-				return ret;
-		}
-	}
 
-	dss_vp_prepare(priv, priv->oldis[0]->parent_vp);
-	dss_vp_enable(priv, priv->oldis[0]->parent_vp, &timings);
+	dss_vp_prepare(priv, priv->active_hw_videoport_id);
+	dss_vp_enable(priv, priv->active_hw_videoport_id, &timings);
 	dss_vp_init(priv);
 
 	ret = clk_get_by_name(dev, "fck", &priv->fclk);

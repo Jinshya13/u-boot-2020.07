@@ -79,8 +79,7 @@ static int tidss_oldi_get_remote_pixels_type(ofnode port_node)
 }
 
 
-int tidss_oldi_get_dual_link_pixel_order(ofnode port1,
-					  ofnode port2)
+int tidss_oldi_get_dual_link_pixel_order(ofnode port1, ofnode port2)
 {
 	int remote_p1_pt, remote_p2_pt;
 	if (!ofnode_valid(port1) || !ofnode_valid(port2))
@@ -124,8 +123,6 @@ static int get_oldi_mode(ofnode oldi_tx, u32 *companion_instance)
 		 * OLDI TXes and, Secondary OLDI nodes don't need this
 		 * information.
 		 */
-		*companion_instance = -1;
-
 		if (ofnode_has_property(oldi_tx, "ti,secondary-oldi"))
 			return OLDI_MODE_SECONDARY;
 
@@ -135,9 +132,9 @@ static int get_oldi_mode(ofnode oldi_tx, u32 *companion_instance)
 		 */
 		return OLDI_MODE_SINGLE_LINK;
 	}
-	ret = *companion_instance;
-    *companion_instance = ofnode_read_u32_default(companion, "reg", *companion_instance);
-    if (*companion_instance == ret){
+
+	ret = ofnode_read_u32(companion, "reg", companion_instance);
+    if (ret) {
 		return OLDI_MODE_UNSUPPORTED;
 	}
     
@@ -173,7 +170,7 @@ static int get_oldi_mode(ofnode oldi_tx, u32 *companion_instance)
 static int get_parent_dss_vp(ofnode oldi_tx, u32 *parent_vp)
 {
     ofnode ep, dss_port;
-    int ret = *parent_vp;
+    int ret;
 
     ep = ofnode_graph_get_endpoint_by_regs(oldi_tx, 0, -1);
     if (ofnode_valid(ep)) {
@@ -182,8 +179,8 @@ static int get_parent_dss_vp(ofnode oldi_tx, u32 *parent_vp)
             ret = -ENODEV;
         }
 
-        *parent_vp = ofnode_read_u32_default(dss_port, "reg", *parent_vp);
-        if(ret == *parent_vp){
+        ret = ofnode_read_u32(dss_port, "reg", parent_vp);
+        if(ret){
             return -ENODEV;
         }
         return 0;
@@ -216,23 +213,23 @@ static int tidss_init_oldi_io_ctrl(struct udevice *dev, struct tidss_oldi *tidss
 }
 
 
-int tidss_oldi_init(struct udevice *dev, struct tidss_oldi **tidss_oldis, int *num_oldis){
+int tidss_oldi_init(struct udevice *dev){
+	struct tidss_drv_priv *priv = dev_get_priv(dev);
 	u32 parent_vp, oldi_instance , companion_instance;
-    ofnode child;
-    ofnode ep;
     int ret, tidss_oldi_panel_count = 0;
-    enum tidss_oldi_link_type link_type = OLDI_MODE_UNSUPPORTED;
-    ofnode oldi_parent = ofnode_find_subnode(dev_ofnode(dev), "oldi-transmitters");
+    enum tidss_oldi_link_type link_type;
 	struct tidss_oldi *tidss_oldi;
 	struct clk serial;
+    ofnode child;
+    ofnode oldi_parent = ofnode_find_subnode(dev_ofnode(dev), "oldi-transmitters");
     
     if (!ofnode_valid(oldi_parent))
 		/* Return gracefully */
 		return 0;
 	
     ofnode_for_each_subnode(child, oldi_parent){ 
-		tidss_oldis[tidss_oldi_panel_count] = NULL;
-		parent_vp = -ENODEV, oldi_instance = -ENODEV, companion_instance = -ENODEV;
+		priv->oldis[tidss_oldi_panel_count] = NULL;
+
 		ret = get_parent_dss_vp(child, &parent_vp);
 		if (ret == -ENODEV) {
 			/*
@@ -246,16 +243,17 @@ int tidss_oldi_init(struct udevice *dev, struct tidss_oldi **tidss_oldis, int *n
 		   continue;
         }
 		
-        ret = oldi_instance;
-        oldi_instance = ofnode_read_u32_default(child, "reg", oldi_instance);
-        if (ret == oldi_instance) {
+        ret = ofnode_read_u32(child, "reg", &oldi_instance);
+        if (ret) {
 			ret = -ENODEV;
             break;
         }
 
         link_type = get_oldi_mode(child, &companion_instance);
 		if (link_type == OLDI_MODE_UNSUPPORTED) {
-			dev_err(dev, "OLDI%u: Unsupported OLDI connection.\n", oldi_instance);
+			
+			dev_warn(dev, "OLDI%u: Unsupported OLDI connection.\n", oldi_instance);
+			
 			ret = OLDI_MODE_UNSUPPORTED;
 			/* Return gracefully, no supported OLDI panel found */
 			break;
@@ -289,10 +287,11 @@ int tidss_oldi_init(struct udevice *dev, struct tidss_oldi **tidss_oldis, int *n
 		}
 		tidss_oldi->serial = malloc(sizeof(struct clk));
 		*(tidss_oldi->serial) = serial;
-		tidss_oldis[tidss_oldi_panel_count] = tidss_oldi;
+		priv->oldis[tidss_oldi_panel_count] = tidss_oldi;
+		priv->oldi_mode = link_type;
 		tidss_oldi_panel_count++;
     }
-	*num_oldis = tidss_oldi_panel_count;
-    return ret;
+	priv->num_oldis = tidss_oldi_panel_count;
+    return 0;
 }
  

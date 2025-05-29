@@ -15,7 +15,6 @@
 #include <media_bus_format.h>
 #include <syscon.h>
 #include <regmap.h>
-#include "tidss_oldi.h"
 
 #define TIDSS_MAX_PORTS 4
 #define TIDSS_MAX_PLANES 4
@@ -34,6 +33,8 @@ enum dss_oldi_modes {
 	OLDI_SINGLE_LINK_DUPLICATE_MODE,	/* Duplicate Output over OLDI 0 and 1. */
 	OLDI_DUAL_LINK,				/* Combined Output over OLDI 0 and 1. */
 };
+
+enum oldi_mode_reg_val { SPWG_18 = 0, JEIDA_24 = 1, SPWG_24 = 2 };
 
 struct dss_features_scaling {
 	u32 in_width_max_5tap_rgb;
@@ -139,6 +140,8 @@ struct tidss_drv_priv {
 	
 	unsigned int num_oldis;
 	struct tidss_oldi *oldis[TIDSS_MAX_OLDI_TXES];
+	int active_hw_videoport_id;
+	int active_panels;
 };
 
 struct tidss_oldi;

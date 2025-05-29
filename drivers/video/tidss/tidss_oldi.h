@@ -12,7 +12,9 @@
 #include <dm/ofnode.h>
 #include <dm/of_access.h>
 #include <media_bus_format.h>
- 
+
+#include "tidss_drv.h"
+
 /* OLDI PORTS */
 #define OLDI_INPUT_PORT    0
 #define OLDI_OURPUT_PORT   1
@@ -37,11 +39,6 @@ enum tidss_oldi_link_type {
    OLDI_MODE_SECONDARY,
 };
  
-// enum dss_oldi_mode_reg_val { SPWG_18 = 0, JEIDA_24 = 1, SPWG_24 = 2 };
-
-
-enum oldi_mode_reg_val { SPWG_18 = 0, JEIDA_24 = 1, SPWG_24 = 2 };
- 
 struct oldi_bus_format {
    u32 bus_fmt;
    u32 data_width;
@@ -50,8 +47,7 @@ struct oldi_bus_format {
 };
 
 struct tidss_oldi {
-	// struct tidss_drv_priv   *tidss;
-	struct udevice          *dev;
+	struct udevice *dev;
 
 	enum tidss_oldi_link_type link_type;
 	const struct oldi_bus_format *bus_format;
@@ -63,7 +59,7 @@ struct tidss_oldi {
 	struct regmap *io_ctrl;
 };
 
-int tidss_oldi_init(struct udevice *dev, struct tidss_oldi **tidss_oldis, int *num_oldis);
+int tidss_oldi_init(struct udevice *dev);
 
 #endif /* __TIDSS_OLDI_H__ */
  
