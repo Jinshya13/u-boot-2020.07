@@ -736,6 +736,11 @@ static void dss_vp_init(struct tidss_drv_priv *priv)
 		VP_REG_FLD_MOD(priv, i, DSS_VP_CONFIG, 1, 2, 2);
 }
 
+void dss_init_hdmi(void){
+	struct udevice *dev;
+	uclass_get_device_by_driver(UCLASS_VIDEO_BRIDGE, DM_DRIVER_GET(sil_sii902x), dev);
+}
+
 static bool is_panel_enabled(ofnode endpoint){
 	ofnode port_parent = ofnode_graph_get_remote_port_parent(endpoint);
 	/* ports parent is the top-most parent of the node, for example dss 
@@ -782,6 +787,7 @@ static int tidss_attach_active_panels(struct tidss_drv_priv *priv){
 
 			remote_port = ofnode_graph_get_remote_port_parent(local_endpoint);
 			if(strstr(ofnode_get_name(remote_port), "oldi")){
+				continue; // Trying to enable hdmi only
 				/* Initialize oldi */
 				ret = tidss_oldi_init(priv->dev);
 				if (ret) {
@@ -799,6 +805,7 @@ static int tidss_attach_active_panels(struct tidss_drv_priv *priv){
 			}
 			else if(strstr(ofnode_get_name(remote_port), "hdmi")){
 				/* Initialize hdmi */
+				dss_init_hdmi();
 				priv->active_hw_videoport_id = hw_videoport;
 				active_panels++;
 			}
@@ -842,6 +849,7 @@ static int tidss_drv_probe(struct udevice *dev)
 		return ret;
 	}
 
+	printf("active hw_videoport: %d\n", priv->active_hw_videoport_id);
 	ret = uclass_first_device_err(UCLASS_PANEL, &panel);
 	if (ret) {
 		if (ret != -ENODEV)
@@ -910,8 +918,8 @@ static int tidss_drv_probe(struct udevice *dev)
 		return ret;
 	}
 
-	dss_ovr_set_plane(priv, 1, 0, 0, 0, 0);
-	dss_ovr_enable_layer(priv, 0, 0, true);
+	dss_ovr_set_plane(priv, 1, priv->active_hw_videoport_id, 0, 0, 0);
+	dss_ovr_enable_layer(priv, priv->active_hw_videoport_id, 0, true);
 
 	/* Video Port cloks */
 	dss_vp_enable_clk(priv, priv->active_hw_videoport_id);
