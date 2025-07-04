@@ -78,6 +78,11 @@
 	};
 };
 
+&sii9022{
+	bootph-all;
+	status="okay";
+};
+
 &dss {
 	status = "okay";
 	bootph-all;

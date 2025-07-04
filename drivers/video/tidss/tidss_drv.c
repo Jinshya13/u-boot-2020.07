@@ -805,6 +805,7 @@ static int tidss_attach_active_panels(struct tidss_drv_priv *priv){
 			}
 			else if(strstr(ofnode_get_name(remote_port), "hdmi")){
 				/* Initialize hdmi */
+				printf("\nHdmi detected\n");
 				dss_init_hdmi();
 				priv->active_hw_videoport_id = hw_videoport;
 				active_panels++;

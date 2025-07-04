@@ -502,7 +502,7 @@ static int sii902x_start_device_output(struct udevice *dev){
 }
 
 // static int sii902x_attach(struct udevice *dev){
-//     // printf("a0512632: %s: found bridge: %s\n", __func__, dev->name);
+//     // printf("sj: %s: found bridge: %s\n", __func__, dev->name);
 //     return 0;
 // }
 
@@ -545,10 +545,10 @@ static int sii902x_probe(struct udevice *dev)
     int temp_cnt = 0;
 	int ret = 0;
     struct display_timing timing;
-    // printf("a0512632: %s\n: found bridge: %s", __func__, dev->name);
+    // printf("sj: %s\n: found bridge: %s", __func__, dev->name);
 	if (device_get_uclass_id(dev->parent) != UCLASS_I2C)
 		return -EPROTONOSUPPORT;
-	printf("\n\n\n[a0512632] sii902x probed\n\n\n");
+	printf("\n\n\n[sj] sii902x probed\n\n\n");
     
     // ret = display_read_timing(dev, &timing);
     // if(!ret) printf("Display Timings:\n");
